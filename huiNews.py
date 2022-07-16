@@ -42,24 +42,25 @@ def parse_weibo(db):
         arrayTxt = re.findall('ranktop">(.*?)<tdclass="td-03">', noTdTxt)
 
         # 保存数据
-        for x in range(10):
+        for x in range(5):
             try:
                 ft = arrayTxt[x]
                 # rank = arrayTxt[0:x.rfind("</")] #热搜排名
                 urlTxt = ft.split('"') #热搜链接
                 hotName = ft.split(">")  # 热搜名称
-                emoji = ''
-                if len(urlTxt) > 7:
-                    emoji = urlTxt[7]
+                emojis = re.findall(r"<imgsrc=\"(.+?)\"",ft)
+                emoji = emojis[0] if emojis else ''
+                contents = re.findall(r"title=\"(.+?)\"",ft)
+                content = contents[0] if contents else ''
                 title = re.sub(r'</a', "", hotName[3])
                 span = re.sub(r'</span', "", hotName[5])
                 label = re.sub(r'\d|\s', "", span)
                 hot = re.sub(r'\D', "", span)
                 result = []
                 result.append(
-                    ('微博', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label))
+                    ('微博', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,hot,label) values (%s, %s, %s, %s, %s, %s, %s)"
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s)"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -91,6 +92,8 @@ def parse_baidu(db):
         # 保存数据
         for i, title in enumerate(data):
             try:
+                if i > 5:
+                    break
                 title = title.strip()
                 result = []
                 result.append(
@@ -119,7 +122,7 @@ def parse_zhihu(db):
         allResponse = requests.get(url, headers=headers).text
         jsonDecode = json.loads(allResponse)
         # 保存数据
-        for i in range(15):
+        for i in range(5):
             try:
                 title = jsonDecode["data"][i]["target"]["title"]
                 link = 'https://www.zhihu.com/question/' + str(jsonDecode["data"][i]["target"]["id"])
@@ -146,7 +149,9 @@ def parse_zhihu(db):
 def db_query(name):
     # 查询数据
     sql = "SELECT * FROM huinews \
-        WHERE TO_DAYS( news_time ) = TO_DAYS(NOW()) AND source = %s" % ("'" + name + "'")
+        WHERE TO_DAYS( news_time ) = TO_DAYS(NOW()) \
+        AND label NOT IN ( '综艺', '音乐', '剧集' ) \
+        AND source = %s" % ("'" + name + "'")
     try:
         # 执行SQL语句
         cursor.execute(sql)
@@ -157,13 +162,13 @@ def db_query(name):
             rank = row[2]
             hot = ' ' + str(row[5]) if row[5] else ''
             img = '<img src="' + str(row[6]) + '" referrerpolicy="no-referrer"> ' if row[6] else ''
-            label = ' ' + str(row[7]) if row[7] else ''
+            label = ' 『' + str(row[7]) + '』' if row[7] else ''
             content = ' ' + str(row[8]) if row[8] else ''
             
             rssItem=PyRSS2Gen.RSSItem(
             title=row[3] if rank>3 else row[3] + '🔥',
             link=row[4],
-            description=img + '『' + str(rank) + '』' + label + hot + content,
+            description=img + str(rank) + label + hot + content,
             pubDate=row[10]
             )
             rssItems.append(rssItem)
