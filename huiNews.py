@@ -48,14 +48,16 @@ def parse_weibo(db):
                 # rank = arrayTxt[0:x.rfind("</")] #热搜排名
                 urlTxt = ft.split('"') #热搜链接
                 hotName = ft.split(">")  # 热搜名称
+                title = re.sub(r'</a', "", hotName[3])
+                span = re.sub(r'</span', "", hotName[5])
+                label = re.sub(r'\d|\s', "", span)
+                if label=='综艺' or label=='剧集' or label=='电影' or label=='音乐':
+                    continue
+                hot = re.sub(r'\D', "", span)
                 emojis = re.findall(r"<imgsrc=\"(.+?)\"",ft)
                 emoji = emojis[0] if emojis else ''
                 contents = re.findall(r"title=\"(.+?)\"",ft)
                 content = contents[0] if contents else ''
-                title = re.sub(r'</a', "", hotName[3])
-                span = re.sub(r'</span', "", hotName[5])
-                label = re.sub(r'\d|\s', "", span)
-                hot = re.sub(r'\D', "", span)
                 result = []
                 result.append(
                     ('微博', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
@@ -150,7 +152,6 @@ def db_query(name):
     # 查询数据
     sql = "SELECT * FROM huinews \
         WHERE TO_DAYS( news_time ) = TO_DAYS(NOW()) \
-        AND label NOT IN ( '综艺', '音乐', '剧集' ) \
         AND source = %s" % ("'" + name + "'")
     try:
         # 执行SQL语句
