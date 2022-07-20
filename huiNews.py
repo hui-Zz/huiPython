@@ -60,9 +60,9 @@ def parse_weibo(db):
                 content = contents[0] if contents else ''
                 result = []
                 result.append(
-                    ('微博', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
+                    ('微博','热搜', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s)"
+                inesrt_re = "insert ignore into huinews (source,category,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -94,14 +94,14 @@ def parse_baidu(db):
         # 保存数据
         for i, title in enumerate(data):
             try:
-                if i > 5:
+                if i > 4:
                     break
                 title = title.strip()
                 result = []
                 result.append(
-                    ('百度', i, title, linkList[i], coverList[i]))
+                    ('百度','热搜', i, title, linkList[i], coverList[i]))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover) values (%s, %s, %s, %s, %s)"
+                inesrt_re = "insert ignore into huinews (source,category,rank,title,link,cover) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -124,7 +124,7 @@ def parse_zhihu(db):
         allResponse = requests.get(url, headers=headers).text
         jsonDecode = json.loads(allResponse)
         # 保存数据
-        for i in range(5):
+        for i in range(3):
             try:
                 title = jsonDecode["data"][i]["target"]["title"]
                 link = 'https://www.zhihu.com/question/' + str(jsonDecode["data"][i]["target"]["id"])
@@ -133,7 +133,7 @@ def parse_zhihu(db):
                 result = []
                 result.append(('知乎', str(i + 1), title, link, cover, content))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,content) values (%s, %s, %s, %s, %s, %s)"
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,content) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -160,17 +160,21 @@ def db_query(name):
         results = cursor.fetchall()
         rssItems=[]
         for row in results:
-            rank = row[2]
-            hot = ' ' + str(row[5]) if row[5] else ''
-            img = '<img src="' + str(row[6]) + '" referrerpolicy="no-referrer"> ' if row[6] else ''
-            label = ' 『' + str(row[7]) + '』' if row[7] else ''
-            content = ' ' + str(row[8]) if row[8] else ''
+            source = row[1]
+            category = row[2]
+            rank = row[3]
+            titleStr = row[4] + '🔝' if rank<=1 else row[4]
+            hot = ' ' + str(row[6]) if row[6] else ''
+            times = ' x' + str(row[7])
+            img = '<img src="' + str(row[8]) + '" referrerpolicy="no-referrer"> ' if row[8] else ''
+            label = ' 『' + str(row[9]) + '』' if row[9] else ''
+            content = ' ' + str(row[10]) if row[10] else ''
             
             rssItem=PyRSS2Gen.RSSItem(
-            title=row[3] if rank>3 else row[3] + '🔥',
-            link=row[4],
-            description=img + str(rank) + label + hot + content,
-            pubDate=row[10]
+            title=titleStr if rank>3 else titleStr + '🔥',
+            link=row[5],
+            description=img + str(rank) + times + label + hot + content,
+            pubDate=row[11]
             )
             rssItems.append(rssItem)
         return rssItems
