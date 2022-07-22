@@ -1,18 +1,19 @@
 # -*- coding:utf-8 -*-
-import os
-import re
-import sys
-import time
-import json
 import base64
 import datetime
-import requests
+# import feedparser
+import json
+import os
 import pymysql
 import PyRSS2Gen
+import re
+import requests
+import sys
+import time
 from configparser import ConfigParser
+from curses.ascii import isdigit
 from lxml import etree
 from threading import Thread
-from curses.ascii import isdigit
 
 # 单线程，多线程采集方式选择(多线程采集速度快但机器负载短时高)
 # thread = 'multi'
@@ -22,8 +23,8 @@ thread = 'single'
 dir = os.path.dirname(os.path.abspath(__file__)) + "/json/"
 
 
+# 【微博热搜】
 def parse_weibo(db):
-    # 微博热点排行榜
     try:
         url = 'https://s.weibo.com/top/summary?cate=realtimehot'
         hearders = {
@@ -40,7 +41,6 @@ def parse_weibo(db):
         newHotTxt = newHotTxt.replace(" ", "")
         noTdTxt = re.findall("<tbody>(.*?)</tbody>", newHotTxt)[0]
         arrayTxt = re.findall('ranktop">(.*?)<tdclass="td-03">', noTdTxt)
-
         # 保存数据
         for x in range(5):
             try:
@@ -77,8 +77,8 @@ def parse_weibo(db):
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
 
+# 【百度热搜】
 def parse_baidu(db):
-    # 百度热搜
     try:
         url = 'https://top.baidu.com/board?platform=pc&sa=pcindex_a_right'
         hearders = {
@@ -90,7 +90,6 @@ def parse_baidu(db):
             '//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a[*]/div[2]/div[2]/div/div/text()')
         linkList = html.xpath('//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a/@href')
         coverList = html.xpath('//div[@class="active-item_1Em2h"]/img/@src')
-
         # 保存数据
         for i, title in enumerate(data):
             try:
@@ -115,7 +114,7 @@ def parse_baidu(db):
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
-# 【知乎热搜】
+# 【知乎热榜】
 def parse_zhihu(db):
     try:
         url = 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50&desktop=true'
@@ -143,6 +142,77 @@ def parse_zhihu(db):
                 break
         rssItems=db_query("知乎")
         makeRss("知乎热榜", url, "知乎热门排行榜", rssItems)
+    except Exception as e:
+        print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
+
+# 【B站热榜】
+def parse_bilibili(db):
+    try:
+        url = 'https://www.bilibili.com/v/popular/rank/all'
+        hearders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+        }
+        res = requests.get(url, headers=hearders)
+        response = etree.HTML(res.content.decode())
+        rank_lists=response.xpath('//ul[@class="rank-list"]/li')
+        # 读取屏蔽关键词
+        config = ConfigParser()
+        config.read('huiNews.ini')
+        blackTitle = config.get('black','title')
+        blackAuthor = config.get('black','author')
+        blackTitleList = blackTitle.split(',')
+        blackAuthorList = blackAuthor.split(',')
+        for rank_list in rank_lists:
+            rank_num=rank_list.xpath('div/div/i/span/text()')
+            if int(rank_num[0]) > 50:
+                break
+            title=rank_list.xpath('div/div[@class="info"]/a[@class="title"]/text()')
+            link=rank_list.xpath('div/div[@class="info"]/a/@href')
+            author=rank_list.xpath('div/div[@class="info"]/div[@class="detail"]/a/span/text()')
+            if author in blackAuthorList:
+                continue
+            if any(s in title for s in blackTitleList):
+                continue
+            try:
+                result = []
+                result.append(('B站', rank_num[0], title[0], 'https:' + link[0], author[0].strip()))
+                # print(result)
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,label) values (%s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                cursor = db.cursor()
+                cursor.executemany(inesrt_re, result)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                print(str(e))
+                break
+        # 获取视频封面
+        sql = "SELECT * FROM huinews \
+            WHERE TO_DAYS( news_time ) = TO_DAYS(NOW()) \
+            AND cover IS NULL AND source = %s" % ("'B站'")
+        try:
+            # 执行SQL语句
+            cursor.execute(sql)
+            # 获取所有记录列表
+            results = cursor.fetchall()
+            rssItems=[]
+            for row in results:
+                link=row[5]
+                time.sleep(1)
+                res = requests.get(link, headers=hearders)
+                response = etree.HTML(res.content.decode())
+                cover=response.xpath('/html/head/meta[15]/@content')
+                try:
+                    update_re = "UPDATE huinews SET cover = '%s' WHERE link = '%s'" % (cover[0], link)
+                    cursor.execute(update_re)
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    print(str(e))
+        except Exception as e:
+            print("查询B站无封面视频失败！" + str(e))
+
+        rssItems=db_query("B站")
+        makeRss("B站热榜", url, "B站热门排行榜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
@@ -194,7 +264,7 @@ def makeRss(title, url, description, rssItems):
 # 打开数据库连接
 def db_connect():
     config = ConfigParser()
-    config.read('pymysql.ini')
+    config.read('huiNews.ini')
     host = config.get('mysql','host')
     port = config.getint('mysql','port')
     user = config.get('mysql','user')
@@ -221,6 +291,7 @@ def single_run(db):
     parse_weibo(db)
     parse_baidu(db)
     parse_zhihu(db)
+    parse_bilibili(db)
     print("单线程采集完成", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     print("耗时:", time.time() - t1)
 
