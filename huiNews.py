@@ -46,21 +46,20 @@ def parse_weibo(db):
             try:
                 ft = arrayTxt[x]
                 # rank = arrayTxt[0:x.rfind("</")] #热搜排名
-                urlTxt = ft.split('"') #热搜链接
+                urlTxt = ft.split('"')  # 热搜链接
                 hotName = ft.split(">")  # 热搜名称
                 title = re.sub(r'</a', "", hotName[3])
                 span = re.sub(r'</span', "", hotName[5])
                 label = re.sub(r'\d|\s', "", span)
-                if label=='综艺' or label=='剧集' or label=='电影' or label=='音乐':
+                if label == '综艺' or label == '剧集' or label == '电影' or label == '音乐':
                     continue
                 hot = re.sub(r'\D', "", span)
-                emojis = re.findall(r"<imgsrc=\"(.+?)\"",ft)
+                emojis = re.findall(r"<imgsrc=\"(.+?)\"", ft)
                 emoji = emojis[0] if emojis else ''
-                contents = re.findall(r"title=\"(.+?)\"",ft)
+                contents = re.findall(r"title=\"(.+?)\"", ft)
                 content = contents[0] if contents else ''
                 result = []
-                result.append(
-                    ('微博','热搜', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
+                result.append(('微博', '热搜', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
                 # print(result)
                 inesrt_re = "insert ignore into huinews (source,category,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
@@ -71,7 +70,7 @@ def parse_weibo(db):
                 print(str(e))
                 break
         # 查询输出
-        rssItems=db_query("微博")
+        rssItems = db_query("微博")
         makeRss("微博热搜", url, "微博热点排行榜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
@@ -86,8 +85,7 @@ def parse_baidu(db):
         }
         res = requests.get(url, headers=hearders)
         html = etree.HTML(res.content.decode())
-        data = html.xpath(
-            '//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a[*]/div[2]/div[2]/div/div/text()')
+        data = html.xpath('//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a[*]/div[2]/div[2]/div/div/text()')
         linkList = html.xpath('//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a/@href')
         coverList = html.xpath('//div[@class="active-item_1Em2h"]/img/@src')
         # 保存数据
@@ -97,8 +95,7 @@ def parse_baidu(db):
                     break
                 title = title.strip()
                 result = []
-                result.append(
-                    ('百度','热搜', i, title, linkList[i], coverList[i]))
+                result.append(('百度', '热搜', i, title, linkList[i], coverList[i]))
                 # print(result)
                 inesrt_re = "insert ignore into huinews (source,category,rank,title,link,cover) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
@@ -109,7 +106,7 @@ def parse_baidu(db):
                 print(str(e))
                 break
         # 查询输出
-        rssItems=db_query("百度")
+        rssItems = db_query("百度")
         makeRss("百度热搜", url, "百度热搜风云榜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
@@ -119,7 +116,7 @@ def parse_zhihu(db):
     try:
         url = 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50&desktop=true'
         headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                                'Chrome/86.0.4240.198 Safari/537.36'}
+                   'Chrome/86.0.4240.198 Safari/537.36'}
         allResponse = requests.get(url, headers=headers).text
         jsonDecode = json.loads(allResponse)
         # 保存数据
@@ -140,7 +137,7 @@ def parse_zhihu(db):
                 db.rollback()
                 print(str(e))
                 break
-        rssItems=db_query("知乎")
+        rssItems = db_query("知乎")
         makeRss("知乎热榜", url, "知乎热门排行榜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
@@ -154,21 +151,21 @@ def parse_bilibili(db):
         }
         res = requests.get(url, headers=hearders)
         response = etree.HTML(res.content.decode())
-        rank_lists=response.xpath('//ul[@class="rank-list"]/li')
+        rank_lists = response.xpath('//ul[@class="rank-list"]/li')
         # 读取屏蔽关键词
         config = ConfigParser()
         config.read('huiNews.ini')
-        blackTitle = config.get('black','title')
-        blackAuthor = config.get('black','author')
+        blackTitle = config.get('black', 'title')
+        blackAuthor = config.get('black', 'author')
         blackTitleList = blackTitle.split(',')
         blackAuthorList = blackAuthor.split(',')
         for rank_list in rank_lists:
-            rank_num=rank_list.xpath('div/div/i/span/text()')
+            rank_num = rank_list.xpath('div/div/i/span/text()')
             if int(rank_num[0]) > 50:
                 break
-            title=rank_list.xpath('div/div[@class="info"]/a[@class="title"]/text()')
-            link=rank_list.xpath('div/div[@class="info"]/a/@href')
-            author=rank_list.xpath('div/div[@class="info"]/div[@class="detail"]/a/span/text()')
+            title = rank_list.xpath('div/div[@class="info"]/a[@class="title"]/text()')
+            link = rank_list.xpath('div/div[@class="info"]/a/@href')
+            author = rank_list.xpath('div/div[@class="info"]/div[@class="detail"]/a/span/text()')
             if author in blackAuthorList:
                 continue
             if any(s in title for s in blackTitleList):
@@ -194,13 +191,13 @@ def parse_bilibili(db):
             cursor.execute(sql)
             # 获取所有记录列表
             results = cursor.fetchall()
-            rssItems=[]
+            rssItems = []
             for row in results:
-                link=row[5]
+                link = row[5]
                 time.sleep(1)
                 res = requests.get(link, headers=hearders)
                 response = etree.HTML(res.content.decode())
-                cover=response.xpath('/html/head/meta[15]/@content')
+                cover = response.xpath('/html/head/meta[15]/@content')
                 try:
                     update_re = "UPDATE huinews SET cover = '%s' WHERE link = '%s'" % (cover[0], link)
                     cursor.execute(update_re)
@@ -211,12 +208,13 @@ def parse_bilibili(db):
         except Exception as e:
             print("查询B站无封面视频失败！" + str(e))
 
-        rssItems=db_query("B站")
+        rssItems = db_query("B站")
         makeRss("B站热榜", url, "B站热门排行榜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
-#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 def db_query(name):
     # 查询数据
@@ -228,48 +226,49 @@ def db_query(name):
         cursor.execute(sql)
         # 获取所有记录列表
         results = cursor.fetchall()
-        rssItems=[]
+        rssItems = []
         for row in results:
             source = row[1]
             category = row[2]
             rank = row[3]
-            titleStr = row[4] + '🔝' if rank<=1 else row[4]
+            titleStr = row[4] + '🔝' if rank <= 1 else row[4]
             hot = ' ' + str(row[6]) if row[6] else ''
             times = ' x' + str(row[7])
             img = '<img src="' + str(row[8]) + '" referrerpolicy="no-referrer"> ' if row[8] else ''
             label = ' 『' + str(row[9]) + '』' if row[9] else ''
             content = ' ' + str(row[10]) if row[10] else ''
-            
-            rssItem=PyRSS2Gen.RSSItem(
-            title=titleStr if rank>3 else titleStr + '🔥',
-            link=row[5],
-            description=img + str(rank) + times + label + hot + content,
-            pubDate=row[11]
+
+            rssItem = PyRSS2Gen.RSSItem(
+                title=titleStr if rank > 3 else titleStr + '🔥',
+                link=row[5],
+                description=img + str(rank) + times + label + hot + content,
+                pubDate=row[11]
             )
             rssItems.append(rssItem)
         return rssItems
     except Exception as e:
         print("查询数据失败！" + str(e))
 
+
 def makeRss(title, url, description, rssItems):
-	rss = PyRSS2Gen.RSS2(
-	title = title, 
-	link = url,
-	description = description, 
-	lastBuildDate = datetime.datetime.now(),
-	items = rssItems)
-	rss.write_xml(open('Z:\\' + title + '_Rss.xml', "w",encoding='utf-8'),encoding='utf-8') 
-	pass
+    rss = PyRSS2Gen.RSS2(
+        title=title,
+        link=url,
+        description=description,
+        lastBuildDate=datetime.datetime.now(),
+        items=rssItems)
+    rss.write_xml(open('Z:\\' + title + '_Rss.xml', "w", encoding='utf-8'), encoding='utf-8')
+    pass
 
 # 打开数据库连接
 def db_connect():
     config = ConfigParser()
     config.read('huiNews.ini')
-    host = config.get('mysql','host')
-    port = config.getint('mysql','port')
-    user = config.get('mysql','user')
-    password = config.get('mysql','password')
-    database = config.get('mysql','database')
+    host = config.get('mysql', 'host')
+    port = config.getint('mysql', 'port')
+    user = config.get('mysql', 'user')
+    password = config.get('mysql', 'password')
+    database = config.get('mysql', 'database')
     db = pymysql.connect(host=host,
                          port=port,
                          user=user,
@@ -283,6 +282,7 @@ def multiple_replace(text):
            "A": "a", "B": "b", "C": "c", "D": "d", "E": "e", "F": "f", "G": "g", "H": "h", "I": "i", "J": "j", "K": "k", "L": "l", "M": "m", "N": "n", "O": "o", "P": "p", "Q": "q", "R": "r", "S": "s", "T": "t", "U": "u", "V": "v", "W": "w", "X": "x", "Y": "y", "Z": "z"}
     pattern = "|".join(map(re.escape, list(dic.keys())))
     return re.sub(pattern, lambda m: dic[m.group()], text)
+
 
 def single_run(db):
     # 单线程运行
