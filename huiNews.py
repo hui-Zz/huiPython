@@ -61,7 +61,7 @@ def parse_weibo(db):
                 result = []
                 result.append(('微博', '热搜', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,category,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -71,7 +71,7 @@ def parse_weibo(db):
                 break
         # 查询输出
         rssItems = db_query("微博")
-        makeRss("微博热搜", url, "微博热点排行榜", rssItems)
+        makeRss("微博热搜", url, "微博热点排行榜", "热搜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
@@ -97,7 +97,7 @@ def parse_baidu(db):
                 result = []
                 result.append(('百度', '热搜', i, title, linkList[i], coverList[i]))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,category,rank,title,link,cover) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,cover) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -107,7 +107,7 @@ def parse_baidu(db):
                 break
         # 查询输出
         rssItems = db_query("百度")
-        makeRss("百度热搜", url, "百度热搜风云榜", rssItems)
+        makeRss("百度热搜", url, "百度热搜风云榜", "热搜", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
@@ -138,7 +138,7 @@ def parse_zhihu(db):
                 print(str(e))
                 break
         rssItems = db_query("知乎")
-        makeRss("知乎热榜", url, "知乎热门排行榜", rssItems)
+        makeRss("知乎热榜", url, "知乎热门排行榜", "", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
@@ -170,11 +170,14 @@ def parse_bilibili(db):
                 continue
             if any(s in title for s in blackTitleList):
                 continue
+            bv = link[0].split('/video/')[-1]
+            content = '<iframe src="https://player.bilibili.com/player.html?bvid=' + bv + \
+                '&high_quality=1" width="650" height="477" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>'
             try:
                 result = []
-                result.append(('B站', rank_num[0], title[0], 'https:' + link[0], author[0].strip()))
+                result.append(('B站', rank_num[0], title[0], 'https:' + link[0], author[0].strip(), content))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,label) values (%s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,author,content) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -209,7 +212,7 @@ def parse_bilibili(db):
             print("查询B站无封面视频失败！" + str(e))
 
         rssItems = db_query("B站")
-        makeRss("B站热榜", url, "B站热门排行榜", rssItems)
+        makeRss("B站热榜", url, "B站热门排行榜", "", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
@@ -229,20 +232,21 @@ def db_query(name):
         rssItems = []
         for row in results:
             source = row[1]
-            category = row[2]
             rank = row[3]
             titleStr = row[4] + '🔝' if rank <= 1 else row[4]
             hot = ' ' + str(row[6]) if row[6] else ''
             times = ' x' + str(row[7])
-            img = '<img src="' + str(row[8]) + '" referrerpolicy="no-referrer"> ' if row[8] else ''
+            img = ' <img src="' + str(row[8]) + '" referrerpolicy="no-referrer"> ' if row[8] else ''
             label = ' 『' + str(row[9]) + '』' if row[9] else ''
-            content = ' ' + str(row[10]) if row[10] else ''
+            content = ' ' + str(row[11]) if row[11] else ''
 
             rssItem = PyRSS2Gen.RSSItem(
                 title=titleStr if rank > 3 else titleStr + '🔥',
                 link=row[5],
-                description=img + str(rank) + times + label + hot + content,
-                pubDate=row[11]
+                description=str(rank) + times + label + hot + content + img,
+                author = row[10],
+                categories = row[2],
+                pubDate=row[12]
             )
             rssItems.append(rssItem)
         return rssItems
@@ -250,11 +254,12 @@ def db_query(name):
         print("查询数据失败！" + str(e))
 
 
-def makeRss(title, url, description, rssItems):
+def makeRss(title, url, description, categories, rssItems):
     rss = PyRSS2Gen.RSS2(
         title=title,
         link=url,
         description=description,
+        categories=categories,
         lastBuildDate=datetime.datetime.now(),
         items=rssItems)
     rss.write_xml(open('Z:\\' + title + '_Rss.xml', "w", encoding='utf-8'), encoding='utf-8')
