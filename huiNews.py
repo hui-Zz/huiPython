@@ -200,9 +200,14 @@ def parse_bilibili(db):
                 time.sleep(1)
                 res = requests.get(link, headers=hearders)
                 response = etree.HTML(res.content.decode())
-                cover = response.xpath('/html/head/meta[15]/@content')
+                keywords = response.xpath('/html/head/meta[@name="keywords"]/@content')
+                hui = 1
+                if any(s in keywords[0] for s in blackTitleList):
+                    hui = 0
+                description = response.xpath('/html/head/meta[@name="description"]/@content')
+                imageUrl = response.xpath('/html/head/meta[@itemprop="image"]/@content')
                 try:
-                    update_re = "UPDATE huinews SET cover = '%s' WHERE link = '%s'" % (cover[0], link)
+                    update_re = "UPDATE huinews SET cover = '%s', hui = '%d', content=CONCAT(content,'%s') WHERE link = '%s'" % (imageUrl[0], hui, description[0], link)
                     cursor.execute(update_re)
                     db.commit()
                 except Exception as e:
@@ -218,12 +223,11 @@ def parse_bilibili(db):
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-
 def db_query(name):
     # 查询数据
     sql = "SELECT * FROM huinews \
         WHERE TO_DAYS( news_time ) = TO_DAYS(NOW()) \
-        AND source = %s" % ("'" + name + "'")
+        AND hui = 1 AND source = %s" % ("'" + name + "'")
     try:
         # 执行SQL语句
         cursor.execute(sql)
