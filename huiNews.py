@@ -158,12 +158,14 @@ def parse_bilibili(db):
         blackTitle = config.get('black', 'title')
         blackAuthor = config.get('black', 'author')
         blackKeyword = config.get('black', 'keyword')
+        blackGame = config.get('black', 'game')
         blackTitleList = blackTitle.split(',')
         blackAuthorList = blackAuthor.split(',')
         blackKeywordList = blackKeyword.split(',')
+        blackGameList = blackGame.split(',')
         for rank_list in rank_lists:
             rank_num = rank_list.xpath('div/div/i/span/text()')
-            if int(rank_num[0]) > 50:
+            if int(rank_num[0]) > 60:
                 break
             title = rank_list.xpath('div/div[@class="info"]/a[@class="title"]/text()')
             link = rank_list.xpath('div/div[@class="info"]/a/@href')
@@ -206,9 +208,14 @@ def parse_bilibili(db):
                 response = etree.HTML(res.content.decode())
                 keywords = response.xpath('/html/head/meta[@name="keywords"]/@content')
                 keyword = keywords[0].replace(title + ",", "")
+                keyword = keyword.replace(",哔哩哔哩,Bilibili,B站,弹幕", "")
+                keywordList = keyword.split(',')
                 hui = 1
                 if any(s in keyword for s in blackKeywordList):
                     hui = 0
+                if '游戏' in keyword:
+                    if any(s in keyword for s in blackGameList):
+                        hui = 0
                 description = response.xpath('/html/head/meta[@name="description"]/@content')
                 imageUrl = response.xpath('/html/head/meta[@itemprop="image"]/@content')
                 try:
@@ -224,6 +231,69 @@ def parse_bilibili(db):
 
         rssItems = db_query("B站")
         makeRss("B站热榜", url, "B站热门排行榜", "", rssItems)
+    except Exception as e:
+        print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
+
+# 【IT之家】
+def parse_ithome(db):
+    try:
+        url = 'https://m.ithome.com/rankm'
+        hearders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+        }
+        res = requests.get(url, headers=hearders)
+        response = etree.HTML(res.content.decode())
+        rank_lists = response.xpath('//div[@class="placeholder one-img-plc"]')
+        for i, rank_list in enumerate(rank_lists):
+            if i > 10:
+                break
+            title = rank_list.xpath('div/a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
+            blackTitleList = ["华为","荣耀","IOS","MacOS"]
+            if any(s in title for s in blackTitleList):
+                continue
+            link = rank_list.xpath('div/a/@href')
+            cover = rank_list.xpath('div/a/div[@class="plc-image"]/img/@src')
+            try:
+                result = []
+                result.append(('IT之家', i, title[0], link[0], cover[0]))
+                # print(result)
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover) values (%s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                cursor = db.cursor()
+                cursor.executemany(inesrt_re, result)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                print(str(e))
+                break
+        # 获取小米资讯
+        url = 'https://m.ithome.com/search/%E5%B0%8F%E7%B1%B3.htm'
+        hearders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+        }
+        res = requests.get(url, headers=hearders)
+        response = etree.HTML(res.content.decode())
+        rank_lists = response.xpath('//div[@class="placeholder one-img-plc"]')
+        for i, rank_list in enumerate(rank_lists):
+            if i > 10:
+                break
+            title = rank_list.xpath('div/a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
+            link = rank_list.xpath('div/a/@href')
+            cover = rank_list.xpath('div/a/div[@class="plc-image"]/img/@src')
+            try:
+                result = []
+                result.append(('IT之家', i, title[0], link[0], cover[0], '小米'))
+                # print(result)
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,label) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                cursor = db.cursor()
+                cursor.executemany(inesrt_re, result)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                print(str(e))
+                break
+
+        rssItems = db_query("IT之家")
+        makeRss("IT之家热榜", url, "IT之家热榜", "", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
