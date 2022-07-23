@@ -41,34 +41,24 @@ def parse_weibo(db):
         newHotTxt = newHotTxt.replace(" ", "")
         noTdTxt = re.findall("<tbody>(.*?)</tbody>", newHotTxt)[0]
         arrayTxt = re.findall('ranktop">(.*?)<tdclass="td-03">', noTdTxt)
-        # 保存数据
+        # 遍历数据
         for x in range(5):
-            try:
-                ft = arrayTxt[x]
-                # rank = arrayTxt[0:x.rfind("</")] #热搜排名
-                urlTxt = ft.split('"')  # 热搜链接
-                hotName = ft.split(">")  # 热搜名称
-                title = re.sub(r'</a', "", hotName[3])
-                span = re.sub(r'</span', "", hotName[5])
-                label = re.sub(r'\d|\s', "", span)
-                if label == '综艺' or label == '剧集' or label == '电影' or label == '音乐':
-                    continue
-                hot = re.sub(r'\D', "", span)
-                emojis = re.findall(r"<imgsrc=\"(.+?)\"", ft)
-                emoji = emojis[0] if emojis else ''
-                contents = re.findall(r"title=\"(.+?)\"", ft)
-                content = contents[0] if contents else ''
-                result = []
-                result.append(('微博', '热搜', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], emoji, hot, label, content))
-                # print(result)
-                inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,cover,hot,label,content) values (%s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-                cursor = db.cursor()
-                cursor.executemany(inesrt_re, result)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                print(str(e))
-                break
+            ft = arrayTxt[x]
+            # rank = arrayTxt[0:x.rfind("</")] #热搜排名
+            urlTxt = ft.split('"')  # 热搜链接
+            hotName = ft.split(">")  # 热搜名称
+            title = re.sub(r'</a', "", hotName[3])
+            span = re.sub(r'</span', "", hotName[5])
+            label = re.sub(r'\d|\s', "", span)
+            if label == '综艺' or label == '剧集' or label == '电影' or label == '音乐':
+                continue
+            hot = re.sub(r'\D', "", span)
+            emojis = re.findall(r"<imgsrc=\"(.+?)\"", ft)
+            emoji = emojis[0] if emojis else ''
+            contents = re.findall(r"title=\"(.+?)\"", ft)
+            content = contents[0] if contents else ''
+            # 保存数据
+            db_insert('微博', '热搜', str(x + 1), title, 'https://s.weibo.com/' + urlTxt[3], hot, emoji, label, '', content)
         # 查询输出
         rssItems = db_query("微博")
         makeRss("微博热搜", url, "微博热点排行榜", "热搜", rssItems)
@@ -88,23 +78,12 @@ def parse_baidu(db):
         data = html.xpath('//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a[*]/div[2]/div[2]/div/div/text()')
         linkList = html.xpath('//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a/@href')
         coverList = html.xpath('//div[@class="active-item_1Em2h"]/img/@src')
-        # 保存数据
+        # 遍历数据
         for i, title in enumerate(data):
-            try:
-                if i > 4:
-                    break
-                title = title.strip()
-                result = []
-                result.append(('百度', '热搜', i, title, linkList[i], coverList[i]))
-                # print(result)
-                inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,cover) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-                cursor = db.cursor()
-                cursor.executemany(inesrt_re, result)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                print(str(e))
+            if i > 4:
                 break
+            # 保存数据
+            db_insert('百度', '热搜', i, title.strip(), linkList[i], '', coverList[i], '', '', '')
         # 查询输出
         rssItems = db_query("百度")
         makeRss("百度热搜", url, "百度热搜风云榜", "热搜", rssItems)
@@ -119,24 +98,16 @@ def parse_zhihu(db):
                    'Chrome/86.0.4240.198 Safari/537.36'}
         allResponse = requests.get(url, headers=headers).text
         jsonDecode = json.loads(allResponse)
-        # 保存数据
+        # 遍历数据
         for i in range(3):
-            try:
-                title = jsonDecode["data"][i]["target"]["title"]
-                link = 'https://www.zhihu.com/question/' + str(jsonDecode["data"][i]["target"]["id"])
-                cover = jsonDecode["data"][i]["children"][0]["thumbnail"]
-                content = jsonDecode["data"][i]["target"]["excerpt"]
-                result = []
-                result.append(('知乎', str(i + 1), title, link, cover, content))
-                # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,content) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-                cursor = db.cursor()
-                cursor.executemany(inesrt_re, result)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                print(str(e))
-                break
+            title = jsonDecode["data"][i]["target"]["title"]
+            link = 'https://www.zhihu.com/question/' + str(jsonDecode["data"][i]["target"]["id"])
+            cover = jsonDecode["data"][i]["children"][0]["thumbnail"]
+            content = jsonDecode["data"][i]["target"]["excerpt"]
+            hot = jsonDecode["data"][i]["detail_text"]
+            # 保存数据
+            db_insert('知乎', '', str(i + 1), title, link, hot, cover, '', '', content)
+        # 查询输出
         rssItems = db_query("知乎")
         makeRss("知乎热榜", url, "知乎热门排行榜", "", rssItems)
     except Exception as e:
@@ -178,18 +149,8 @@ def parse_bilibili(db):
             bv = link[0].split('/video/')[-1]
             content = '<iframe src="https://player.bilibili.com/player.html?bvid=' + bv + \
                 '&high_quality=1" width="650" height="477" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>'
-            try:
-                result = []
-                result.append(('B站', rank_num[0], title[0], 'https:' + link[0], hot[0].strip(), author[0].strip(), content))
-                # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,hot,author,content) values (%s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-                cursor = db.cursor()
-                cursor.executemany(inesrt_re, result)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                print(str(e))
-                break
+            # 保存数据
+            db_insert('B站', '', rank_num[0], title[0], 'https:' + link[0], hot[0].strip(), '', '', author[0].strip(), content)
         # 获取视频封面
         sql = "SELECT * FROM huinews \
             WHERE TO_DAYS( news_time ) = TO_DAYS(NOW()) \
@@ -228,7 +189,7 @@ def parse_bilibili(db):
                     print(str(e))
         except Exception as e:
             print("查询B站无封面视频失败！" + str(e))
-
+        # 查询输出
         rssItems = db_query("B站")
         makeRss("B站热榜", url, "B站热门排行榜", "", rssItems)
     except Exception as e:
@@ -237,35 +198,7 @@ def parse_bilibili(db):
 # 【IT之家】
 def parse_ithome(db):
     try:
-        url = 'https://m.ithome.com/rankm'
-        hearders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
-        }
-        res = requests.get(url, headers=hearders)
-        response = etree.HTML(res.content.decode())
-        rank_lists = response.xpath('//div[@class="placeholder one-img-plc"]')
-        for i, rank_list in enumerate(rank_lists):
-            if i > 10:
-                break
-            title = rank_list.xpath('div/a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
-            blackTitleList = ["华为","荣耀","IOS","MacOS"]
-            if any(s in title for s in blackTitleList):
-                continue
-            link = rank_list.xpath('div/a/@href')
-            cover = rank_list.xpath('div/a/div[@class="plc-image"]/img/@src')
-            try:
-                result = []
-                result.append(('IT之家', i, title[0], link[0], cover[0]))
-                # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover) values (%s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-                cursor = db.cursor()
-                cursor.executemany(inesrt_re, result)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                print(str(e))
-                break
-        # 获取小米资讯
+        # [获取小米资讯]
         url = 'https://m.ithome.com/search/%E5%B0%8F%E7%B1%B3.htm'
         hearders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
@@ -278,20 +211,29 @@ def parse_ithome(db):
                 break
             title = rank_list.xpath('div/a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
             link = rank_list.xpath('div/a/@href')
-            cover = rank_list.xpath('div/a/div[@class="plc-image"]/img/@src')
-            try:
-                result = []
-                result.append(('IT之家', i, title[0], link[0], cover[0], '小米'))
-                # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,cover,label) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-                cursor = db.cursor()
-                cursor.executemany(inesrt_re, result)
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                print(str(e))
+            cover = rank_list.xpath('div/a/div[@class="plc-image"]/img/@data-original')
+            # 保存数据
+            db_insert('IT之家', '', str(i + 1), title[0], link[0], '', cover[0], '小米', '', '')
+        # [获取热榜]
+        url = 'https://m.ithome.com/rankm'
+        hearders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+        }
+        res = requests.get(url, headers=hearders)
+        response = etree.HTML(res.content.decode())
+        rank_lists = response.xpath('//div[@class="placeholder one-img-plc"]')
+        for i, rank_list in enumerate(rank_lists):
+            if i > 10:
                 break
-
+            title = rank_list.xpath('a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
+            blackTitleList = ["华为","荣耀","IOS","MacOS"]
+            if any(s in title for s in blackTitleList):
+                continue
+            link = rank_list.xpath('a/@href')
+            cover = rank_list.xpath('a/div[@class="plc-image"]/img/@data-original')
+            # 保存数据
+            db_insert('IT之家', '', str(i + 1), title[0], link[0], '', cover[0], '', '', '')
+        # 查询输出
         rssItems = db_query("IT之家")
         makeRss("IT之家热榜", url, "IT之家热榜", "", rssItems)
     except Exception as e:
@@ -331,8 +273,22 @@ def db_query(name):
             rssItems.append(rssItem)
         return rssItems
     except Exception as e:
-        print("查询数据失败！" + str(e))
+        print("查询"+ name +"数据失败！" + str(e))
 
+def db_insert(source,categories,rank,title,link,hot,cover,label,author,content):
+    try:
+        result = []
+        result.append((source,categories,rank,title,link,hot,cover,label,author,content))
+        print(result)
+        inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,hot,cover,label,author,content) \
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+        print(inesrt_re)
+        cursor = db.cursor()
+        cursor.executemany(inesrt_re, result)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print("插入"+ source +"数据失败！" + str(e))
 
 def makeRss(title, url, description, categories, rssItems):
     rss = PyRSS2Gen.RSS2(
@@ -377,6 +333,7 @@ def single_run(db):
     parse_baidu(db)
     parse_zhihu(db)
     parse_bilibili(db)
+    parse_ithome(db)
     print("单线程采集完成", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     print("耗时:", time.time() - t1)
 
