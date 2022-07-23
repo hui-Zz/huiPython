@@ -157,8 +157,10 @@ def parse_bilibili(db):
         config.read('huiNews.ini')
         blackTitle = config.get('black', 'title')
         blackAuthor = config.get('black', 'author')
+        blackKeyword = config.get('black', 'keyword')
         blackTitleList = blackTitle.split(',')
         blackAuthorList = blackAuthor.split(',')
+        blackKeywordList = blackKeyword.split(',')
         for rank_list in rank_lists:
             rank_num = rank_list.xpath('div/div/i/span/text()')
             if int(rank_num[0]) > 50:
@@ -166,6 +168,7 @@ def parse_bilibili(db):
             title = rank_list.xpath('div/div[@class="info"]/a[@class="title"]/text()')
             link = rank_list.xpath('div/div[@class="info"]/a/@href')
             author = rank_list.xpath('div/div[@class="info"]/div[@class="detail"]/a/span/text()')
+            hot = rank_list.xpath('div/div[@class="info"]/div[@class="detail"]/div/span[1]/text()')
             if author in blackAuthorList:
                 continue
             if any(s in title for s in blackTitleList):
@@ -175,9 +178,9 @@ def parse_bilibili(db):
                 '&high_quality=1" width="650" height="477" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>'
             try:
                 result = []
-                result.append(('B站', rank_num[0], title[0], 'https:' + link[0], author[0].strip(), content))
+                result.append(('B站', rank_num[0], title[0], 'https:' + link[0], hot[0].strip(), author[0].strip(), content))
                 # print(result)
-                inesrt_re = "insert ignore into huinews (source,rank,title,link,author,content) values (%s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+                inesrt_re = "insert ignore into huinews (source,rank,title,link,hot,author,content) values (%s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
                 cursor = db.cursor()
                 cursor.executemany(inesrt_re, result)
                 db.commit()
@@ -196,18 +199,21 @@ def parse_bilibili(db):
             results = cursor.fetchall()
             rssItems = []
             for row in results:
+                title = row[4]
                 link = row[5]
                 time.sleep(1)
                 res = requests.get(link, headers=hearders)
                 response = etree.HTML(res.content.decode())
                 keywords = response.xpath('/html/head/meta[@name="keywords"]/@content')
+                keyword = keywords[0].replace(title + ",", "")
                 hui = 1
-                if any(s in keywords[0] for s in blackTitleList):
+                if any(s in keyword for s in blackKeywordList):
                     hui = 0
                 description = response.xpath('/html/head/meta[@name="description"]/@content')
                 imageUrl = response.xpath('/html/head/meta[@itemprop="image"]/@content')
                 try:
-                    update_re = "UPDATE huinews SET cover = '%s', hui = '%d', content=CONCAT(content,'%s') WHERE link = '%s'" % (imageUrl[0], hui, description[0], link)
+                    update_re = "UPDATE huinews SET cover = '%s', label = '%s', hui = '%d', content=CONCAT(content,'%s') \
+                                 WHERE link = '%s'" % (imageUrl[0], keyword, hui, description[0], link)
                     cursor.execute(update_re)
                     db.commit()
                 except Exception as e:
