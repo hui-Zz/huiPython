@@ -18,22 +18,23 @@ from threading import Thread
 # 单线程，多线程采集方式选择(多线程采集速度快但机器负载短时高)
 # thread = 'multi'
 thread = 'single'
-
 # 采集数据保存目录,为了安全请修改本程序名字,或移动到其他目录,并修改以下路径,默认与程序同目录
 dir = os.path.dirname(os.path.abspath(__file__)) + "/json/"
-
-
+config = ConfigParser()
+config.read('huiNews.ini')
+userAgent = config.get('hearders', 'User-Agent')
 # 【微博热搜】
 def parse_weibo(db):
     try:
         url = 'https://s.weibo.com/top/summary?cate=realtimehot'
+        weiboCookie = config.get('hearders', 'weibo_cookie')
         hearders = {
-            'User-Agent': '',
+            'User-Agent': userAgent,
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
             'accept-encoding': 'gzip, deflate, br',
             'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
             'cache-control': 'max-age=0',
-            'cookie': '',
+            'cookie': weiboCookie,
             'referer': 'https://passport.weibo.com/'
         }
         hotTxt = requests.get(url, headers=hearders).content.decode()
@@ -70,9 +71,7 @@ def parse_weibo(db):
 def parse_baidu(db):
     try:
         url = 'https://top.baidu.com/board?platform=pc&sa=pcindex_a_right'
-        hearders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.4997.0 Safari/537.36'
-        }
+        hearders = {'User-Agent': userAgent}
         res = requests.get(url, headers=hearders)
         html = etree.HTML(res.content.decode())
         data = html.xpath('//*[@id="sanRoot"]/main/div[1]/div[1]/div[2]/a[*]/div[2]/div[2]/div/div/text()')
@@ -94,8 +93,7 @@ def parse_baidu(db):
 def parse_zhihu(db):
     try:
         url = 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50&desktop=true'
-        headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                   'Chrome/86.0.4240.198 Safari/537.36'}
+        headers = {'user-agent': userAgent}
         allResponse = requests.get(url, headers=headers).text
         jsonDecode = json.loads(allResponse)
         # 遍历数据
@@ -117,15 +115,11 @@ def parse_zhihu(db):
 def parse_bilibili(db):
     try:
         url = 'https://www.bilibili.com/v/popular/rank/all'
-        hearders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
-        }
+        hearders = {'User-Agent': userAgent}
         res = requests.get(url, headers=hearders)
         response = etree.HTML(res.content.decode())
         rank_lists = response.xpath('//ul[@class="rank-list"]/li')
         # 读取屏蔽关键词
-        config = ConfigParser()
-        config.read('huiNews.ini')
         blackTitle = config.get('black', 'title')
         blackAuthor = config.get('black', 'author')
         blackKeyword = config.get('black', 'keyword')
@@ -200,25 +194,21 @@ def parse_ithome(db):
     try:
         # [获取小米资讯]
         url = 'https://m.ithome.com/search/%E5%B0%8F%E7%B1%B3.htm'
-        hearders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
-        }
+        hearders = {'User-Agent': userAgent}
         res = requests.get(url, headers=hearders)
         response = etree.HTML(res.content.decode())
         rank_lists = response.xpath('//div[@class="placeholder one-img-plc"]')
         for i, rank_list in enumerate(rank_lists):
             if i > 10:
                 break
-            title = rank_list.xpath('div/a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
-            link = rank_list.xpath('div/a/@href')
-            cover = rank_list.xpath('div/a/div[@class="plc-image"]/img/@data-original')
+            title = rank_list.xpath('a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
+            link = rank_list.xpath('a/@href')
+            cover = rank_list.xpath('a/div[@class="plc-image"]/img/@data-original')
             # 保存数据
             db_insert('IT之家', '', str(i + 1), title[0], link[0], '', cover[0], '小米', '', '')
         # [获取热榜]
         url = 'https://m.ithome.com/rankm'
-        hearders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
-        }
+        hearders = {'User-Agent': userAgent}
         res = requests.get(url, headers=hearders)
         response = etree.HTML(res.content.decode())
         rank_lists = response.xpath('//div[@class="placeholder one-img-plc"]')
@@ -279,10 +269,9 @@ def db_insert(source,categories,rank,title,link,hot,cover,label,author,content):
     try:
         result = []
         result.append((source,categories,rank,title,link,hot,cover,label,author,content))
-        print(result)
+        # print(result)
         inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,hot,cover,label,author,content) \
             values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
-        print(inesrt_re)
         cursor = db.cursor()
         cursor.executemany(inesrt_re, result)
         db.commit()
@@ -303,8 +292,6 @@ def makeRss(title, url, description, categories, rssItems):
 
 # 打开数据库连接
 def db_connect():
-    config = ConfigParser()
-    config.read('huiNews.ini')
     host = config.get('mysql', 'host')
     port = config.getint('mysql', 'port')
     user = config.get('mysql', 'user')
