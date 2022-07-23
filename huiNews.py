@@ -229,6 +229,28 @@ def parse_ithome(db):
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
+# 【今日热榜-榜中榜】
+def parse_tophub(db):
+    try:
+        url = 'https://tophub.today/hot'
+        tophubCookie = config.get('hearders', 'tophub_cookie')
+        hearders = {'cookie': tophubCookie, 'User-Agent': userAgent}
+        res = requests.get(url, headers=hearders)
+        response = etree.HTML(res.content.decode())
+        rank_lists = response.xpath('//div[@id="hotrank"]/div/div[@class="rank-section"][2]/ul/li[@class="child-item"]')
+        for i, rank_list in enumerate(rank_lists):
+            title = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="medium-txt"]/a/text()')
+            link = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="medium-txt"]/a/@href')
+            sourceStr = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="small-txt"]/text()')
+            sourceList = sourceStr[0].split(" ‧ ")
+            # 保存数据
+            db_insert(sourceList[0], '', str(i + 1), title[0], link[0], sourceList[1], '', '榜中榜', '', '')
+        # 查询输出
+        rssItems = db_query("虎扑社区")
+        makeRss("虎扑社区", url, "虎扑社区", "", rssItems)
+    except Exception as e:
+        print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
+
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 def db_query(name):
@@ -321,6 +343,7 @@ def single_run(db):
     parse_zhihu(db)
     parse_bilibili(db)
     parse_ithome(db)
+    parse_tophub(db)
     print("单线程采集完成", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     print("耗时:", time.time() - t1)
 
