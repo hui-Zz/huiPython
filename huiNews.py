@@ -243,17 +243,25 @@ def parse_tophub(db):
         hearders = {'cookie': tophubCookie, 'User-Agent': userAgent}
         res = requests.get(url, headers=hearders)
         response = etree.HTML(res.content.decode())
-        rank_lists = response.xpath('//div[@id="hotrank"]/div/div[@class="rank-section"][2]/ul/li[@class="child-item"]')
+        # 周榜：//div[@id="hotrank"]/div/div[@class="rank-section"][2]/ul/li[@class="child-item"]
+        # 日榜
+        rank_lists = response.xpath('//div[@id="hotrank"]/div/div[@class="rank-section"][1]/ul/span/li[@class="child-item"]')
         for i, rank_list in enumerate(rank_lists):
-            title = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="medium-txt"]/a/text()')
-            link = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="medium-txt"]/a/@href')
             sourceStr = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="small-txt"]/text()')
             sourceList = sourceStr[0].split(" ‧ ")
+            if sourceList[0] =='微信' or sourceList[0] == '知乎':
+                continue
+            title = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="medium-txt"]/a/text()')
+            link = rank_list.xpath('div[@class="center-item"]/div/div/p[@class="medium-txt"]/a/@href')
             # 保存数据
             db_insert(sourceList[0], '', str(i + 1), title[0], link[0], sourceList[1], '', '榜中榜', '', '')
         # 查询输出
         rssItems = db_query("虎扑社区")
         makeRss("虎扑社区", url, "虎扑社区", "", rssItems)
+        rssItems = db_query("少数派")
+        makeRss("少数派", url, "少数派", "", rssItems)
+        rssItems = db_query("虎嗅网")
+        makeRss("虎嗅网", url, "虎嗅网", "", rssItems)
     except Exception as e:
         print(sys._getframe().f_code.co_name+"采集错误，请及时更新规则！" + str(e))
 
@@ -300,6 +308,10 @@ def db_insert(source,categories,rank,title,link,hot,cover,label,author,content):
         # print(result)
         inesrt_re = "insert ignore into huinews (source,categories,rank,title,link,hot,cover,label,author,content) \
             values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update times = times + 1"
+        if cover:
+            inesrt_re = inesrt_re + ",cover=values(cover)"
+        if hot:
+            inesrt_re = inesrt_re + ", hot=values(hot)"
         cursor = db.cursor()
         cursor.executemany(inesrt_re, result)
         db.commit()
