@@ -20,8 +20,12 @@ from threading import Thread
 thread = 'single'
 # 采集数据保存目录,为了安全请修改本程序名字,或移动到其他目录,并修改以下路径,默认与程序同目录
 dir = os.path.dirname(os.path.abspath(__file__)) + "/json/"
+iniPath = "huiNews.ini"
+if(os.path.exists('/home/huinews/huiNews.ini')):
+    iniPath = '/home/huinews/huiNews.ini'
 config = ConfigParser()
-config.read('huiNews.ini')
+config.read(iniPath)
+rssPath = config.get('config', 'rss_path')
 userAgent = config.get('hearders', 'User-Agent')
 # 【微博热搜】
 def parse_weibo(db):
@@ -130,7 +134,7 @@ def parse_bilibili(db):
         blackGameList = blackGame.split(',')
         for rank_list in rank_lists:
             rank_num = rank_list.xpath('div/div/i/span/text()')
-            if int(rank_num[0]) > 60:
+            if int(rank_num[0]) > 80:
                 break
             title = rank_list.xpath('div/div[@class="info"]/a[@class="title"]/text()')
             link = rank_list.xpath('div/div[@class="info"]/a/@href')
@@ -192,6 +196,9 @@ def parse_bilibili(db):
 # 【IT之家】
 def parse_ithome(db):
     try:
+        # 屏蔽词
+        blackIT = config.get('black', 'it')
+        blackITList = blackIT.split(',')
         # [获取小米资讯]
         url = 'https://m.ithome.com/search/%E5%B0%8F%E7%B1%B3.htm'
         hearders = {'User-Agent': userAgent}
@@ -216,8 +223,7 @@ def parse_ithome(db):
             if i > 10:
                 break
             title = rank_list.xpath('a/div[@class="plc-con"]/p[@class="plc-title"]/text()')
-            blackTitleList = ["华为","荣耀","IOS","MacOS"]
-            if any(s in title for s in blackTitleList):
+            if any(s in title[0] for s in blackITList):
                 continue
             link = rank_list.xpath('a/@href')
             cover = rank_list.xpath('a/div[@class="plc-image"]/img/@data-original')
@@ -301,17 +307,6 @@ def db_insert(source,categories,rank,title,link,hot,cover,label,author,content):
         db.rollback()
         print("插入"+ source +"数据失败！" + str(e))
 
-def makeRss(title, url, description, categories, rssItems):
-    rss = PyRSS2Gen.RSS2(
-        title=title,
-        link=url,
-        description=description,
-        categories=categories,
-        lastBuildDate=datetime.datetime.now(),
-        items=rssItems)
-    rss.write_xml(open('Z:\\' + title + '_Rss.xml', "w", encoding='utf-8'), encoding='utf-8')
-    pass
-
 # 打开数据库连接
 def db_connect():
     host = config.get('mysql', 'host')
@@ -326,13 +321,23 @@ def db_connect():
                          database=database)
     return db
 
+def makeRss(title, url, description, categories, rssItems):
+    rss = PyRSS2Gen.RSS2(
+        title=title,
+        link=url,
+        description=description,
+        categories=categories,
+        lastBuildDate=datetime.datetime.now(),
+        items=rssItems)
+    rss.write_xml(open(rssPath + title + '_Rss.xml', "w", encoding='utf-8'), encoding='utf-8')
+    pass
+
 # 字符替换加密(默认为大小写反转),修改此处顺序和添加数字替换可实现不同密码加密(并同时修改get/index.php内密码)
 def multiple_replace(text):
     dic = {"a": "A", "b": "B", "c": "C", "d": "D", "e": "E", "f": "F", "g": "G", "h": "H", "i": "I", "j": "J", "k": "K", "l": "L", "m": "M", "n": "N", "o": "O", "p": "P", "q": "Q", "r": "R", "s": "S", "t": "T", "u": "U", "v": "V", "w": "W", "x": "X", "y": "Y", "z": "Z",
            "A": "a", "B": "b", "C": "c", "D": "d", "E": "e", "F": "f", "G": "g", "H": "h", "I": "i", "J": "j", "K": "k", "L": "l", "M": "m", "N": "n", "O": "o", "P": "p", "Q": "q", "R": "r", "S": "s", "T": "t", "U": "u", "V": "v", "W": "w", "X": "x", "Y": "y", "Z": "z"}
     pattern = "|".join(map(re.escape, list(dic.keys())))
     return re.sub(pattern, lambda m: dic[m.group()], text)
-
 
 def single_run(db):
     # 单线程运行
@@ -346,7 +351,6 @@ def single_run(db):
     parse_tophub(db)
     print("单线程采集完成", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     print("耗时:", time.time() - t1)
-
 
 def multi_run(db):
     # 多线程抓取
@@ -365,7 +369,6 @@ def multi_run(db):
         t.join()
     print("多线程采集完成", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     print("耗时:", time.time() - t1)
-
 
 if __name__ == "__main__":
     db = db_connect()
